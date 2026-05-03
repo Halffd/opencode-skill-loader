@@ -104,9 +104,9 @@ function formatSkillList(skills: SkillEntry[], showTags: boolean): string {
     grouped.get(cat)!.push(s);
   }
 
-  let out = "Load a specialized skill when the task at hand matches one of the skills listed below.\n\n";
-  out += "The skill will inject detailed instructions into your context. Use it when you need domain-specific guidance.\n\n";
-  out += 'Invoke this tool with `name` matching one of the skill names below (partial matches supported).\n\n';
+  let out = "Load a specialized skill that provides domain-specific instructions. ";
+  out += "Invoke with `name` matching one of the skill names below (exact or partial match supported). ";
+  out += "The skill content will be injected into your context.\n\n";
 
   for (const [cat, items] of grouped) {
     out += `## ${cat}\n`;
@@ -122,12 +122,15 @@ function formatSkillList(skills: SkillEntry[], showTags: boolean): string {
 
 function matchSkill(skills: SkillEntry[], name: string): SkillEntry | undefined {
   const lower = name.toLowerCase();
-  let best: SkillEntry | undefined;
-  let bestScore = 0;
 
   for (const s of skills) {
+    if (s.name.toLowerCase() === lower) return s;
+  }
+
+  let best: SkillEntry | undefined;
+  let bestScore = 0;
+  for (const s of skills) {
     const sLower = s.name.toLowerCase();
-    if (sLower === lower) return s;
     if (sLower.includes(lower) || lower.includes(sLower)) {
       const score = Math.min(sLower.length, lower.length);
       if (score > bestScore) {
@@ -136,16 +139,11 @@ function matchSkill(skills: SkillEntry[], name: string): SkillEntry | undefined 
       }
     }
   }
-
   if (best) return best;
 
   for (const s of skills) {
-    if (s.tags.some((t) => t.toLowerCase().includes(lower))) {
-      return s;
-    }
-    if (s.description.toLowerCase().includes(lower)) {
-      return s;
-    }
+    if (s.tags.some((t) => t.toLowerCase().includes(lower))) return s;
+    if (s.description.toLowerCase().includes(lower)) return s;
   }
 
   return undefined;
@@ -171,31 +169,33 @@ export default async function SkillLoaderPlugin(ctx: any, options: SkillLoaderOp
   const allDirs = [...defaultDirs, ...extraDirs, ...(projectSkillsDir ? [projectSkillsDir] : [])];
 
   const skills = await discoverSkills(allDirs, defaultCategory);
-  const description = formatSkillList(skills, showTags);
+  const ourDescription = formatSkillList(skills, showTags);
+
+  let pendingResult: string | null = null;
 
   const skillTool = tool({
-    description,
+    description: ourDescription,
     args: {
       name: tool.schema.string().describe(
         "Name of the skill to load (partial match supported)",
       ),
     },
     async execute(args: { name: string }, _ctx: any) {
+      if (pendingResult !== null) {
+        const result = pendingResult;
+        pendingResult = null;
+        return result;
+      }
+
       const matched = matchSkill(skills, args.name);
       if (!matched) {
         const suggestions = skills
-          .filter(
-            (s) =>
-              s.name
-                .toLowerCase()
-                .includes(args.name.toLowerCase().slice(0, 3)),
-          )
+          .filter((s) => s.name.toLowerCase().includes(args.name.toLowerCase().slice(0, 3)))
           .slice(0, 5)
           .map((s) => s.name);
-        const hint =
-          suggestions.length > 0
-            ? `\n\nSimilar skills: ${suggestions.join(", ")}`
-            : `\n\nAvailable: ${skills.map((s) => s.name).join(", ")}`;
+        const hint = suggestions.length > 0
+          ? `\n\nSimilar skills: ${suggestions.join(", ")}`
+          : `\n\nAvailable: ${skills.map((s) => s.name).join(", ")}`;
         return `Skill "${args.name}" not found.${hint}`;
       }
 
@@ -205,5 +205,33 @@ export default async function SkillLoaderPlugin(ctx: any, options: SkillLoaderOp
 
   return {
     tool: { skill: skillTool },
+
+    "tool.definition": async (input: { toolID: string }, output: { description: string; parameters: any }) => {
+      if (input.toolID === "skill") {
+        output.description = ourDescription;
+      }
+    },
+
+    "tool.execute.before": async (input: { tool: string; sessionID: string; callID: string }, output: { args: any }) => {
+      if (input.tool !== "skill") return;
+
+      const name = output.args?.name;
+      if (typeof name !== "string") return;
+
+      const matched = matchSkill(skills, name);
+      if (matched) {
+        const content = matched.content || `Skill "${matched.name}" loaded but has no body content.`;
+        pendingResult = content;
+      } else {
+        const suggestions = skills
+          .filter((s) => s.name.toLowerCase().includes(name.toLowerCase().slice(0, 3)))
+          .slice(0, 5)
+          .map((s) => s.name);
+        const hint = suggestions.length > 0
+          ? `\n\nSimilar skills: ${suggestions.join(", ")}`
+          : `\n\nAvailable: ${skills.map((s) => s.name).join(", ")}`;
+        pendingResult = `Skill "${name}" not found.${hint}`;
+      }
+    },
   };
 }
