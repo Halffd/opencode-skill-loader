@@ -5,16 +5,16 @@ Discovers and loads "skills" (SKILL.md files with YAML frontmatter) from multipl
 ## Features
 
 - **Discovers skills** by scanning directories for `SKILL.md` files with YAML frontmatter (name, description, category, tags)
-- **Default skill directories** — `~/.config/opencode/skills/` and `~/.config/opencode/skill/`
+- **Default skill directories** - `~/.config/opencode/skills/` and `~/.config/opencode/skill/`
 - **Project-level skills** from `.opencode/skills/` within the project directory
-- **Flexible matching** — exact match, then partial/substring match, then tag/description search
+- **Flexible matching** - exact match, then partial/substring match, then tag/description search
 - **Auto-generated tool description** listing all available skills grouped by category
 - **Deduplication** by skill name across directories
 - **Suggestions** for near-matches when a skill is not found
 
 ## Installation
 
-Add the plugin to your `opencode.json`:
+In `opencode.json`:
 
 **From GitHub:**
 
@@ -42,7 +42,7 @@ The `skill` tool is exposed with a `name` parameter (partial match supported). W
 
 ## Configuration
 
-Options can be set in `opencode.json` under the plugin config key:
+Config (in `opencode.json`):
 
 | Option | Default | Description |
 |--------|---------|-------------|
@@ -63,6 +63,5 @@ category: code
 tags: [refactoring, patterns]
 ---
 
-Skill instructions and content go here.
-The agent will receive this content when the skill is loaded.
+Skill content goes here.
 ```
