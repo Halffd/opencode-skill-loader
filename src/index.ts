@@ -204,6 +204,7 @@ export default async function SkillLoaderPlugin(ctx: any, options: SkillLoaderOp
   });
 
   return {
+    id: "opencode-skill-loader",
     tool: { skill: skillTool },
 
     "tool.definition": async (input: { toolID: string }, output: { description: string; parameters: any }) => {
