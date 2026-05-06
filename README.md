@@ -1,63 +1,68 @@
 # opencode-skill-loader
 
-OpenCode plugin that discovers and loads skills from SKILL.md files on demand.
-
-Replaces the skill tool from oh-my-openagent with a lightweight, configurable alternative.
+Discovers and loads "skills" (SKILL.md files with YAML frontmatter) from multiple directories, making them available as a tool the AI agent can invoke to inject domain-specific instructions into its context.
 
 ## Features
 
-- Discovers skills from `~/.config/opencode/skills/` and `~/.config/opencode/skill/`
-- Parses YAML frontmatter (`name`, `description`, `category`, `tags`)
-- Checks `.opencode/skills/` in project directory
-- Groups skills by category in the tool description
-- Matches by exact name, partial substring, tag, or description
-- Returns helpful suggestions on miss
+- **Discovers skills** by scanning directories for `SKILL.md` files with YAML frontmatter (name, description, category, tags)
+- **Default skill directories** — `~/.config/opencode/skills/` and `~/.config/opencode/skill/`
+- **Project-level skills** from `.opencode/skills/` within the project directory
+- **Flexible matching** — exact match, then partial/substring match, then tag/description search
+- **Auto-generated tool description** listing all available skills grouped by category
+- **Deduplication** by skill name across directories
+- **Suggestions** for near-matches when a skill is not found
 
 ## Installation
 
-Add to your `opencode.json`:
+Add the plugin to your `opencode.json`:
+
+**From GitHub:**
 
 ```json
 {
   "plugin": [
-    "plugins/opencode-skill-loader"
+    "github:Halffd/opencode-skill-loader"
   ]
 }
 ```
+
+**From local path:**
+
+```json
+{
+  "plugin": [
+    "file:///absolute/path/to/opencode-skill-loader"
+  ]
+}
+```
+
+## Tool
+
+The `skill` tool is exposed with a `name` parameter (partial match supported). When invoked, the skill content is injected into the agent's context.
 
 ## Configuration
 
-Pass options as a tuple:
+Options can be set in `opencode.json` under the plugin config key:
 
-```json
-{
-  "plugin": [
-    ["plugins/opencode-skill-loader", {
-      "dirs": ["/custom/skills/path"],
-      "includeProjectSkills": true,
-      "defaultCategory": "uncategorized",
-      "showTags": true
-    }]
-  ]
-}
+| Option | Default | Description |
+|--------|---------|-------------|
+| `dirs` | `[]` | Additional directories to scan for skills |
+| `includeProjectSkills` | `true` | Whether to scan `.opencode/skills/` in the project |
+| `defaultCategory` | `"uncategorized"` | Default category for skills without one |
+| `showTags` | `true` | Show tags in the skill listing description |
+
+## Skill Format
+
+Skills are `SKILL.md` files with YAML frontmatter:
+
+```markdown
+---
+name: my-skill
+description: A brief description of what this skill does
+category: code
+tags: [refactoring, patterns]
+---
+
+Skill instructions and content go here.
+The agent will receive this content when the skill is loaded.
 ```
-
-### Options
-
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `dirs` | `string[]` | `[]` | Additional skill directories to search |
-| `includeProjectSkills` | `boolean` | `true` | Search `.opencode/skills/` in the project directory |
-| `defaultCategory` | `string` | `"uncategorized"` | Category assigned to skills without one |
-| `showTags` | `boolean` | `true` | Show tags in the tool description |
-
-## Build
-
-```bash
-bun install
-bun build src/index.ts --outdir dist --target bun
-```
-
-## License
-
-MIT
