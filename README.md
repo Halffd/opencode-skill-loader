@@ -16,7 +16,17 @@ Discovers and loads "skills" (SKILL.md files with YAML frontmatter) from multipl
 
 In `opencode.json`:
 
-**From GitHub:**
+**npm/bun:**
+
+```json
+{
+  "plugin": [
+    "@Halffd/opencode-skill-loader"
+  ]
+}
+```
+
+**GitHub:**
 
 ```json
 {
@@ -26,7 +36,7 @@ In `opencode.json`:
 }
 ```
 
-**From local path:**
+**Local:**
 
 ```json
 {
