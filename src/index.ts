@@ -1,7 +1,6 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join, basename } from "node:path";
 import { homedir } from "node:os";
-import { tool } from "@opencode-ai/plugin";
 
 interface SkillEntry {
   name: string;
@@ -149,13 +148,20 @@ function matchSkill(skills: SkillEntry[], name: string): SkillEntry | undefined 
   return undefined;
 }
 
-export default async function SkillLoaderPlugin(ctx: any, options: SkillLoaderOptions = {}) {
-  const {
-    dirs: extraDirs = [],
-    includeProjectSkills = true,
-    defaultCategory = "uncategorized",
-    showTags = true,
-  } = options;
+export default {
+  id: "opencode-skill-loader",
+
+  async setup(ctx: any) {
+    // OpenCode v2 loads a plugin as an object with an id and a setup
+    // function; the v1 "export default async function(ctx)" shape is
+    // rejected with SchemaError(Expected object at ["default"]).
+    const options: SkillLoaderOptions = {};
+    const {
+      dirs: extraDirs = [],
+      includeProjectSkills = true,
+      defaultCategory = "uncategorized",
+      showTags = true,
+    } = options;
 
   const defaultDirs = [
     join(HOME, ".config", "opencode", "skills"),
@@ -171,68 +177,47 @@ export default async function SkillLoaderPlugin(ctx: any, options: SkillLoaderOp
   const skills = await discoverSkills(allDirs, defaultCategory);
   const ourDescription = formatSkillList(skills, showTags);
 
-  let pendingResult: string | null = null;
-
-  const skillTool = tool({
-    description: ourDescription,
-    args: {
-      name: tool.schema.string().describe(
-        "Name of the skill to load (partial match supported)",
-      ),
-    },
-    async execute(args: { name: string }, _ctx: any) {
-      if (pendingResult !== null) {
-        const result = pendingResult;
-        pendingResult = null;
-        return result;
-      }
-
-      const matched = matchSkill(skills, args.name);
-      if (!matched) {
-        const suggestions = skills
-          .filter((s) => s.name.toLowerCase().includes(args.name.toLowerCase().slice(0, 3)))
-          .slice(0, 5)
-          .map((s) => s.name);
-        const hint = suggestions.length > 0
-          ? `\n\nSimilar skills: ${suggestions.join(", ")}`
-          : `\n\nAvailable: ${skills.map((s) => s.name).join(", ")}`;
-        return `Skill "${args.name}" not found.${hint}`;
-      }
-
-      return matched.content || `Skill "${matched.name}" loaded but has no body content.`;
-    },
-  });
-
-  return {
-    id: "opencode-skill-loader",
-    tool: { skill: skillTool },
-
-    "tool.definition": async (input: { toolID: string }, output: { description: string; parameters: any }) => {
-      if (input.toolID === "skill") {
-        output.description = ourDescription;
-      }
-    },
-
-    "tool.execute.before": async (input: { tool: string; sessionID: string; callID: string }, output: { args: any }) => {
-      if (input.tool !== "skill") return;
-
-      const name = output.args?.name;
-      if (typeof name !== "string") return;
-
-      const matched = matchSkill(skills, name);
-      if (matched) {
-        const content = matched.content || `Skill "${matched.name}" loaded but has no body content.`;
-        pendingResult = content;
-      } else {
-        const suggestions = skills
-          .filter((s) => s.name.toLowerCase().includes(name.toLowerCase().slice(0, 3)))
-          .slice(0, 5)
-          .map((s) => s.name);
-        const hint = suggestions.length > 0
-          ? `\n\nSimilar skills: ${suggestions.join(", ")}`
-          : `\n\nAvailable: ${skills.map((s) => s.name).join(", ")}`;
-        pendingResult = `Skill "${name}" not found.${hint}`;
-      }
-    },
+  const notFoundMessage = (name: string): string => {
+    const suggestions = skills
+      .filter((s) => s.name.toLowerCase().includes(name.toLowerCase().slice(0, 3)))
+      .slice(0, 5)
+      .map((s) => s.name);
+    const hint = suggestions.length > 0
+      ? `\n\nSimilar skills: ${suggestions.join(", ")}`
+      : `\n\nAvailable: ${skills.map((s) => s.name).join(", ")}`;
+    return `Skill "${name}" not found.${hint}`;
   };
-}
+
+  const skillContent = (name: string): string => {
+    const matched = matchSkill(skills, name);
+    if (!matched) return notFoundMessage(name);
+    return matched.content || `Skill "${matched.name}" loaded but has no body content.`;
+  };
+
+  await ctx.tool.transform((editor: any) => {
+    editor.add({
+      name: "skill",
+      // codemode:false sends this tool straight to the model instead of
+      // routing it through Code Mode. Without it the tool does not appear
+      // in the model's tool list at all.
+      options: { codemode: false },
+      description: ourDescription,
+      input: {
+        type: "object",
+        properties: {
+          name: {
+            type: "string",
+            description: "Name of the skill to load (partial match supported)",
+          },
+        },
+        required: ["name"],
+        additionalProperties: false,
+      },
+      async execute(input: any) {
+        const name = String(input?.name ?? "");
+        return skillContent(name);
+      },
+    });
+  });
+  },
+};
